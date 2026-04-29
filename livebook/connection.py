@@ -16,11 +16,12 @@ class JupyterConnection:
     def __init__(self, url: str, token: str) -> None:
         self.url = url.rstrip("/")
         self.token = token
-        self._client = httpx.Client(
-            base_url=self.url,
-            headers={"Authorization": f"token {token}"},
-        )
+        headers = {}
+        if token:
+            headers["Authorization"] = f"token {token}"
+        self._client = httpx.Client(base_url=self.url, headers=headers)
         self._ws_connections: dict[str, websocket.WebSocket] = {}
+        self._fetch_xsrf()
 
     # --- Kernel lifecycle (REST) ---
 
@@ -112,6 +113,14 @@ class JupyterConnection:
         if kernel_id in self._ws_connections:
             self._ws_connections[kernel_id].close()
             del self._ws_connections[kernel_id]
+
+    def _fetch_xsrf(self) -> None:
+        """Fetch _xsrf cookie from the server and set it as a header for all requests."""
+        resp = self._client.get("/tree")
+        xsrf = resp.cookies.get("_xsrf")
+        if xsrf:
+            self._client.headers["X-XSRFToken"] = xsrf
+            self._client.cookies.set("_xsrf", xsrf)
 
     def _ws_url(self, kernel_id: str) -> str:
         base = self.url.replace("http://", "ws://").replace("https://", "wss://")
