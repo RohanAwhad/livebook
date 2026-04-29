@@ -141,8 +141,39 @@ class Notebook:
         self._conn.save_notebook(path, content)
 
     def save_local(self, path: str) -> None:
-        """Save notebook to the local filesystem via nbformat."""
+        """Save notebook to the local filesystem via nbformat.
+
+        Preserves existing outputs from the on-disk notebook for cells
+        whose source hasn't changed (matched by tag). Changed or new
+        cells get empty outputs.
+        """
+        # Build map of existing outputs/execution_count from disk
+        existing: dict[str, tuple[list, int | None]] = {}  # tag -> (outputs, execution_count)
+        existing_sources: dict[str, str] = {}
+        try:
+            with open(path) as f:
+                existing_nb = nbformat.read(f, as_version=4)
+            for nb_cell in existing_nb.cells:
+                tags = nb_cell.metadata.get("tags", [])
+                if tags and nb_cell.cell_type == "code":
+                    tag = tags[0]
+                    existing[tag] = (nb_cell.outputs, nb_cell.get("execution_count"))
+                    existing_sources[tag] = nb_cell.source
+        except FileNotFoundError:
+            pass
+
         nb_node = self._to_nbformat()
+
+        # Carry over outputs for unchanged cells
+        for nb_cell in nb_node.cells:
+            tags = nb_cell.metadata.get("tags", [])
+            if tags and nb_cell.cell_type == "code":
+                tag = tags[0]
+                if tag in existing and existing_sources.get(tag) == nb_cell.source:
+                    outputs, exec_count = existing[tag]
+                    nb_cell.outputs = outputs
+                    nb_cell.execution_count = exec_count
+
         with open(path, "w") as f:
             nbformat.write(nb_node, f)
 
