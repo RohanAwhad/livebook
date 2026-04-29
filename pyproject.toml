@@ -9,3 +9,9 @@ dependencies = [
     "websocket-client",
     "nbformat",
 ]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.2.0",
+    "jupyter-server>=2.17.0",
+]
