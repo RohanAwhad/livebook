@@ -68,3 +68,15 @@ def conn(jupyter_server):
     """A JupyterConnection connected to the test server."""
     url, token = jupyter_server
     return JupyterConnection(url=url, token=token)
+
+
+@pytest.fixture
+def remote_notebooks(conn):
+    """Track remote notebook paths created during a test, delete them on teardown."""
+    paths: list[str] = []
+    yield paths
+    for path in paths:
+        try:
+            conn._client.delete(f"/api/contents/{path}")
+        except Exception:
+            pass

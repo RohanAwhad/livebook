@@ -160,9 +160,10 @@ class TestSave:
             assert loaded.cells[0].metadata["tags"][0].startswith("s-")
             assert loaded.cells[1].cell_type == "markdown"
 
-    def test_save_remote(self, conn: JupyterConnection):
+    def test_save_remote(self, conn: JupyterConnection, remote_notebooks):
         with Notebook(conn) as nb:
             nb.add_code("y = 2", tag="r")
+            remote_notebooks.append("test_save_remote.ipynb")
             nb.save("test_save_remote.ipynb")
 
         # verify by loading it back
@@ -170,10 +171,11 @@ class TestSave:
             assert len(nb2.tags) == 1
             assert nb2[nb2.tags[0]].source == "y = 2"
 
-    def test_open_preserves_tags(self, conn: JupyterConnection):
+    def test_open_preserves_tags(self, conn: JupyterConnection, remote_notebooks):
         with Notebook(conn) as nb:
             c = nb.add_code("z = 3", tag="keep")
             original_tag = c.tag
+            remote_notebooks.append("test_preserve_tags.ipynb")
             nb.save("test_preserve_tags.ipynb")
 
         with Notebook.open(conn, "test_preserve_tags.ipynb") as nb2:

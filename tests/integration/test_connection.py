@@ -73,7 +73,7 @@ class TestExecute:
 
 
 class TestNotebookContents:
-    def test_save_and_get_roundtrip(self, conn: JupyterConnection):
+    def test_save_and_get_roundtrip(self, conn: JupyterConnection, remote_notebooks):
         import nbformat
 
         nb = nbformat.v4.new_notebook()
@@ -82,6 +82,7 @@ class TestNotebookContents:
 
         import json
 
+        remote_notebooks.append("test_roundtrip.ipynb")
         conn.save_notebook("test_roundtrip.ipynb", json.loads(content))
         loaded = conn.get_notebook("test_roundtrip.ipynb")
         assert len(loaded["cells"]) == 1
