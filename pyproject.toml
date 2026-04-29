@@ -14,4 +14,5 @@ dependencies = [
 dev = [
     "ipykernel>=7.2.0",
     "jupyter-server>=2.17.0",
+    "pytest>=9.0.3",
 ]
