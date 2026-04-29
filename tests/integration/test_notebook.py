@@ -11,6 +11,17 @@ class TestNotebookLifecycle:
             assert nb._kernel_id is not None
         assert nb._kernel_id is None
 
+    def test_manual_start_stop(self, conn: JupyterConnection):
+        nb = Notebook(conn)
+        kernel_id = nb.start()
+        assert isinstance(kernel_id, str)
+        assert nb._kernel_id == kernel_id
+        cell = nb.add_code("1 + 1", tag="t")
+        result = nb.run(cell.tag)
+        assert result.success
+        nb.stop()
+        assert nb._kernel_id is None
+
     def test_manual_kernel_via_connection(self, conn: JupyterConnection):
         kernel_id = conn.start_kernel("python3")
         result = conn.execute(kernel_id, "1 + 1")
@@ -181,3 +192,73 @@ class TestSave:
         with Notebook.open(conn, "test_preserve_tags.ipynb") as nb2:
             assert original_tag in nb2.tags
             assert nb2[original_tag].source == "z = 3"
+
+
+class TestSession:
+    def test_save_and_load_session(self, conn: JupyterConnection, tmp_path):
+        nb = Notebook(conn)
+        nb.start()
+        a = nb.add_code("x = 1", tag="a")
+        b = nb.add_markdown("# hi", tag="b")
+        nb.run(a.tag)
+
+        session_path = str(tmp_path / "session.json")
+        nb.save_session(session_path)
+
+        # Load into a new Notebook instance
+        nb2 = Notebook.load_session(conn, session_path)
+        assert nb2._kernel_id == nb._kernel_id
+        assert nb2.tags == nb.tags
+        assert nb2[a.tag].source == "x = 1"
+        assert nb2[b.tag].cell_type == "markdown"
+
+        # Kernel is still alive — can execute
+        c = nb2.add_code("print(x)", tag="c")
+        result = nb2.run(c.tag)
+        assert result.success
+        assert result.stdout == "1\n"
+
+        nb2.stop()
+
+    def test_save_session_requires_path(self, conn: JupyterConnection):
+        nb = Notebook(conn)
+        nb.start()
+        nb.add_code("x = 1", tag="a")
+
+        import pytest
+
+        with pytest.raises(TypeError):
+            nb.save_session()  # type: ignore[call-arg]
+
+        nb.stop()
+
+    def test_load_session_update_cell_rerun(self, conn: JupyterConnection, tmp_path):
+        """Simulate the multi-turn agent workflow."""
+        session_path = str(tmp_path / "session.json")
+
+        # Turn 1: start, add cell, run, save session
+        nb = Notebook(conn)
+        nb.start()
+        cell = nb.add_code("x = 1", tag="setup")
+        nb.run(cell.tag)
+        nb.save_session(session_path)
+        tag = cell.tag
+
+        # Turn 2: load session, update cell, re-run
+        nb2 = Notebook.load_session(conn, session_path)
+        nb2[tag].source = "x = 99"
+        result = nb2.run(tag)
+        assert result.success
+
+        # Verify kernel state updated
+        check = nb2.add_code("print(x)", tag="check")
+        result = nb2.run(check.tag)
+        assert result.stdout == "99\n"
+        nb2.save_session(session_path)
+
+        # Turn 3: load again, verify cells persisted
+        nb3 = Notebook.load_session(conn, session_path)
+        assert len(nb3.tags) == 2
+        assert nb3[tag].source == "x = 99"
+
+        nb3.stop()

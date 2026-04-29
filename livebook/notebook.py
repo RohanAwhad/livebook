@@ -43,14 +43,25 @@ class Notebook:
         nb._rebuild_index()
         return nb
 
-    def __enter__(self) -> Notebook:
-        self._kernel_id = self._conn.start_kernel(self._kernel_name)
-        return self
+    # --- Kernel lifecycle ---
 
-    def __exit__(self, *args: Any) -> None:
+    def start(self) -> str:
+        """Start the kernel. Returns kernel_id."""
+        self._kernel_id = self._conn.start_kernel(self._kernel_name)
+        return self._kernel_id
+
+    def stop(self) -> None:
+        """Stop the kernel."""
         if self._kernel_id:
             self._conn.stop_kernel(self._kernel_id)
             self._kernel_id = None
+
+    def __enter__(self) -> Notebook:
+        self.start()
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.stop()
 
     # --- Cell management ---
 
@@ -106,7 +117,7 @@ class Notebook:
 
     def run(self, tag: str) -> CellResult:
         """Run a single cell by tag. Returns CellResult."""
-        assert self._kernel_id is not None, "Notebook must be used as a context manager"
+        assert self._kernel_id is not None, "Kernel not started. Call nb.start() or use as context manager"
         cell = self[tag]
         result = self._conn.execute(self._kernel_id, cell.source)
         cell.result = result
@@ -134,6 +145,38 @@ class Notebook:
         nb_node = self._to_nbformat()
         with open(path, "w") as f:
             nbformat.write(nb_node, f)
+
+    # --- Session persistence ---
+
+    def save_session(self, path: str) -> None:
+        """Save notebook state (kernel_id, cells) to a JSON file."""
+        data = {
+            "kernel_id": self._kernel_id,
+            "kernel_name": self._kernel_name,
+            "cells": [
+                {"tag": c.tag, "source": c.source, "cell_type": c.cell_type}
+                for c in self._cells
+            ],
+        }
+        with open(path, "w") as f:
+            json.dump(data, f)
+
+    @classmethod
+    def load_session(cls, conn: JupyterConnection, path: str) -> Notebook:
+        """Restore a notebook from a session file. Reconnects to the existing kernel."""
+        with open(path) as f:
+            data = json.load(f)
+        nb = cls(conn, kernel=data.get("kernel_name", "python3"))
+        nb._kernel_id = data["kernel_id"]
+        for cell_data in data.get("cells", []):
+            cell = Cell(
+                tag=cell_data["tag"],
+                source=cell_data["source"],
+                cell_type=cell_data.get("cell_type", "code"),
+            )
+            nb._cells.append(cell)
+        nb._rebuild_index()
+        return nb
 
     # --- Internal ---
 
