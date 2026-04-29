@@ -1,0 +1,11 @@
+[project]
+name = "livebook"
+version = "0.1.0"
+description = "Python library for AI agents to operate Jupyter notebooks programmatically"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx",
+    "websocket-client",
+    "nbformat",
+]
